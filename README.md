@@ -1,7 +1,3 @@
-# Personal Open Dashboard
+# Provision Over Docker
 
-This is the Azzurro Technology Platform
-
-Based on the open source VICI project 
-
-This is the basis for components build out with POD
+Allows for a parent directory's docker file to be executed as needed to provision ONE docker based deployment reverse proxied with Caddy

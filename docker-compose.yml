@@ -1,0 +1,25 @@
+    version: "3.8"
+    services:
+      caddy:
+        image: caddy:latest
+        ports:
+          - "80:80"
+          - "443:443"
+        volumes:
+          - ./Caddyfile:/etc/caddy/Caddyfile
+          - caddy_data:/data
+          - caddy_config:/config
+        networks:
+          - pod
+      app:
+        build:
+          context: ../
+          dockerfile: Dockerfile
+        networks:
+          - pod
+    networks:
+      pod:
+        driver: bridge
+    volumes:
+      caddy_data:
+      caddy_config:

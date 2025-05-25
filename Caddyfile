@@ -1,0 +1,6 @@
+    {
+        # global options
+    }
+    yourdomain.com {
+        reverse_proxy app:8080 # Assuming your app runs on port 8080
+    }
