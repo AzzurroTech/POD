@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dynamic Forms – Web Component Demo</title>
+<style>
+  /* ---------- Basic layout ---------- */
+  body {font-family:Arial,sans-serif;margin:0;padding:0;box-sizing:border-box;}
+  header {background:#004466;color:#fff;padding:1rem;display:flex;align-items:center;gap:1rem;}
+  header h1 {margin:0;font-size:1.2rem;flex-grow:1;}
+  header button {background:#fff;color:#004466;border:none;padding:.4rem .8rem;cursor:pointer;}
+  main {padding:1rem;min-height:60vh;}
+  .empty-msg {color:#777;font-style:italic;}
+  article {border:1px solid #ccc;margin:1rem 0;padding:.5rem;background:#fafafa;}
+  summary {font-weight:bold;cursor:pointer;}
+  .template-adder {margin:1rem 0;padding:.5rem;background:#eef;border:1px dashed #88a;}
+  .template-adder button {margin-right:.5rem;}
+  .hidden {display:none;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="pathHeader">/</h1>
+  <button id="downloadJsonBtn">💾 Download JSON</button>
+  <input type="file" id="uploadJsonInput" accept=".json" class="hidden">
+  <button id="uploadJsonBtn">📂 Upload JSON</button>
+</header>
+
+<!-- ---------------------------------------------------------
+     0. Main interface (empty → message + path header)
+---------------------------------------------------------- -->
+<main id="mainInterface">
+  <p class="empty-msg">There is no data in this context.</p>
+</main>
+
+<!-- ---------------------------------------------------------
+     1. File selector + reset + submit (to import a new form)
+---------------------------------------------------------- -->
+<section style="padding:1rem;background:#f0f8ff;">
+  <h2>Import a form (HTML)</h2>
+  <input type="file" id="formFileInput" accept=".html,.htm">
+  <button id="resetImportBtn">Reset</button>
+  <button id="submitImportBtn">Submit</button>
+</section>
+
+<!-- ---------------------------------------------------------
+     2. TemplateAdder – reusable area that adds templates
+---------------------------------------------------------- -->
+<template id="TemplateAdder">
+  <div class="template-adder">
+    <strong>Add a component:</strong>
+    <!-- Buttons will be injected here by JS -->
+  </div>
+</template>
+
+<!-- ---------------------------------------------------------
+     3. Container for imported templates (kept hidden until used)
+---------------------------------------------------------- -->
+<div id="templatesContainer" class="hidden"></div>
+
+<script>
+/* =========================================================
+   Utility helpers
+   ========================================================= */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+
+/* ---------------------------------------------------------
+   0. Show current path in header & empty‑state handling
+   ---------------------------------------------------------- */
+function refreshPath() {
+  $('#pathHeader').textContent = window.location.pathname || '/';
+}
+refreshPath();
+
+/* Show/hide the “empty” message depending on children */
+function updateEmptyMessage(mainEl) {
+  const hasChildren = Array.from(mainEl.children).some(ch => !ch.classList?.contains('empty-msg'));
+  const msg = mainEl.querySelector('.empty-msg');
+  if (hasChildren) {
+    if (msg) msg.remove();
+  } else {
+    if (!msg) {
+      const p = document.createElement('p');
+      p.className = 'empty-msg';
+      p.textContent = 'There is no data in this context.';
+      mainEl.appendChild(p);
+    }
+  }
+}
+
+/* ---------------------------------------------------------
+   1. Importing an external HTML form as a template
+   ---------------------------------------------------------- */
+let importedTemplate = null;   // will hold a <template> element
+
+$('#resetImportBtn').addEventListener('click', () => {
+  $('#formFileInput').value = '';
+  importedTemplate = null;
+});
+
+$('#submitImportBtn').addEventListener('click', () => {
+  const file = $('#formFileInput').files[0];
+  if (!file) { alert('Choose a file first.'); return; }
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    const html = e.target.result;
+    // Wrap the raw HTML in a <template> so the browser parses it but does not render yet
+    const tmpl = document.createElement('template');
+    tmpl.innerHTML = html.trim();
+    importedTemplate = tmpl;
+    alert('Form imported – you can now add it using the “Add a component” area.');
+    // Insert a TemplateAdder next to the main interface if not already there
+    if (!$('#mainInterface').nextElementSibling?.classList?.contains('template-adder')) {
+      const adder = createTemplateAdder($('#mainInterface'), [tmpl]);
+      $('#mainInterface').after(adder);
+    }
+  };
+  reader.readAsText(file);
+});
+
+/* ---------------------------------------------------------
+   2. Create a TemplateAdder for a given parent (main tag)
+   ---------------------------------------------------------- */
+function createTemplateAdder(parentMain, templateList) {
+  const adderClone = $('#TemplateAdder').content.cloneNode(true);
+  const container = adderClone.querySelector('.template-adder');
+
+  // Build a button for each supplied template
+  templateList.forEach((tmpl, idx) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = tmpl.getAttribute('data-name') || `Template ${idx + 1}`;
+    btn.addEventListener('click', () => addComponentFromTemplate(tmpl, parentMain));
+    container.appendChild(btn);
+  });
+  return container;
+}
+
+/* ---------------------------------------------------------
+   3. Adding a component based on a template
+   ---------------------------------------------------------- */
+function addComponentFromTemplate(tmpl, targetMain) {
+  // Clone the template content (deep clone)
+  const fragment = tmpl.content.cloneNode(true);
+
+  // Wrap in <article>
+  const article = document.createElement('article');
+
+  // Create <summary>/<details> wrapper
+  const details = document.createElement('details');
+  const summary = document.createElement('summary');
+  summary.textContent = tmpl.getAttribute('data-name') || 'Component';
+  details.appendChild(summary);
+
+  // Inside details we need a nested <main> that behaves like the top‑level main
+  const nestedMain = document.createElement('main');
+  nestedMain.appendChild(fragment);
+  details.appendChild(nestedMain);
+  article.appendChild(details);
+
+  // Add a TemplateAdder inside the nested main (so you can further nest)
+  const innerAdder = createTemplateAdder(nestedMain, getAllTemplates());
+  nestedMain.after(innerAdder);
+
+  // Append to the target main
+  targetMain.appendChild(article);
+  updateEmptyMessage(targetMain);
+}
+
+/* ---------------------------------------------------------
+   Helper: collect all stored templates (including the imported one)
+   ---------------------------------------------------------- */
+function getAllTemplates() {
+  const list = [];
+  // Any <template> inside #templatesContainer is considered a stored template
+  $$('#templatesContainer template').forEach(t => list.push(t));
+  if (importedTemplate) list.push(importedTemplate);
+  return list;
+}
+
+/* ---------------------------------------------------------
+   4. Download current DOM as JSON
+   ---------------------------------------------------------- */
+$('#downloadJsonBtn').addEventListener('click', () => {
+  const data = serializeMain($('#mainInterface'));
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'dynamic-forms.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+/* Recursively turn a <main> (and its children) into a plain object */
+function serializeMain(mainEl) {
+  const obj = {
+    tag: 'main',
+    children: []
+  };
+  mainEl.childNodes.forEach(node => {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      if (node.matches('article')) {
+        // Serialize article → summary + nested main
+        const summary = node.querySelector('summary')?.textContent?.trim() || '';
+        const nestedMain = node.querySelector('main');
+        obj.children.push({
+          tag: 'article',
+          title: summary,
+          content: serializeMain(nestedMain)
+        });
+      } else if (node.matches('template')) {
+        // ignore hidden templates
+      } else {
+        // generic element – capture outerHTML
+        obj.children.push({tag: node.tagName.toLowerCase(), html: node.outerHTML});
+      }
+    }
+  });
+  return obj;
+}
+
+/* ---------------------------------------------------------
+   5. Upload JSON and merge into current main interface
+   ---------------------------------------------------------- */
+$('#uploadJsonBtn').addEventListener('click', () => $('#uploadJsonInput').click());
+
+$('#uploadJsonInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (data && data.tag === 'main') {
+        rebuildFromData($('#mainInterface'), data);
+        alert('JSON imported successfully.');
+      } else {
+        alert('Invalid JSON structure.');
+      }
+    } catch (err) {
+      alert('Failed to parse JSON: ' + err);
+    }
+  };
+  reader.readAsText(file);
+});
+
+/* Recursively rebuild DOM from the serialized object */
+function rebuildFromData(container, obj) {
+  container.innerHTML = ''; // clear existing
+  obj.children.forEach(child => {
+    if (child.tag === 'article') {
+      const article = document.createElement('article');
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.textContent = child.title || 'Untitled';
+      details.appendChild(summary);
+
+      const nestedMain = document.createElement('main');
+      rebuildFromData(nestedMain, child.content);
+      details.appendChild(nestedMain);
+      article.appendChild(details);
+
+      // Add inner TemplateAdder for further nesting
+      const innerAdder = createTemplateAdder(nestedMain, getAllTemplates());
+      nestedMain.after(innerAdder);
+
+      container.appendChild(article);
+    } else {
+      // generic element – just inject its raw HTML
+      const el = document.createElement('div');
+      el.innerHTML = child.html;
+      container.appendChild(el.firstElementChild);
+    }
+  });
+  updateEmptyMessage(container);
+}
+
+/* ---------------------------------------------------------
+   6. Initialisation – expose a way to store user‑defined templates
+   ---------------------------------------------------------- */
+function storeUserTemplate(htmlString, name) {
+  const tmpl = document.createElement('template');
+  tmpl.innerHTML = htmlString.trim();
+  if (name) tmpl.setAttribute('data-name', name);
+  $('#templatesContainer').appendChild(tmpl);
+}
+
+/* Example: pre‑populate with a simple form template (optional) */
+storeUserTemplate(`
+<form>
+  <label>Name: <input type="text" name="name"></label><br>
+  <label>Email: <input type="email" name="email"></label><br>
+  <button type="submit">Send</button>
+</form>
+`, 'Simple Contact Form');
+
+/* Add a TemplateAdder for the top‑level main (if templates exist) */
+if (getAllTemplates().length) {
+  const topAdder = createTemplateAdder($('#mainInterface'), getAllTemplates());
+  $('#mainInterface').after(topAdder);
+}
+
+/* Ensure empty‑message is correct on load */
+updateEmptyMessage($('#mainInterface'));
+
+</script>
+</body>
+</html>

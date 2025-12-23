@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dynamic UX – Integrated with Dynamic Forms</title>
+<style>
+  /* -------------------- General layout -------------------- */
+  body {font-family:Arial,sans-serif;margin:0;padding:0;box-sizing:border-box;}
+  header {background:#004466;color:#fff;padding:1rem;display:flex;align-items:center;gap:1rem;}
+  header h1 {margin:0;font-size:1.2rem;flex-grow:1;}
+  header button {background:#fff;color:#004466;border:none;padding:.4rem .8rem;cursor:pointer;}
+  main {padding:1rem;min-height:60vh;}
+  .empty-msg {color:#777;font-style:italic;}
+  article {border:1px solid #ccc;margin:1rem 0;padding:.5rem;background:#fafafa;}
+  summary {font-weight:bold;cursor:pointer;}
+  .template-adder {margin:1rem 0;padding:.5rem;background:#eef;border:1px dashed #88a;}
+  .template-adder button {margin-right:.5rem;}
+  .hidden {display:none;}
+  /* -------------------- Modal (Dynamic Forms) -------------------- */
+  .modal-backdrop {
+    position:fixed;top:0;left:0;width:100vw;height:100vh;
+    background:rgba(0,0,0,0.5);display:none;justify-content:center;align-items:center;
+    z-index:1000;
+  }
+  .modal {
+    background:#fff;padding:1rem;max-width:600px;width:90%;border-radius:5px;position:relative;
+    box-shadow:0 4px 12px rgba(0,0,0,0.3);
+  }
+  .modal h2 {margin-top:0;}
+  .close-modal {
+    position:absolute;top:.5rem;right:.5rem;background:none;border:none;font-size:1.2rem;cursor:pointer;
+  }
+  /* -------------------- Dynamic Forms specific -------------------- */
+  .df-builder {border:1px solid #ccc;padding:1rem;margin-top:1rem;}
+  .df-builder h2 {margin-top:0;}
+  .df-builder label {display:block;margin-top:10px;}
+  .df-builder select,
+  .df-builder input[type=text] {width:100%;max-width:300px;padding:5px;}
+  .df-builder button {margin-top:10px;margin-right:5px;}
+  #df-preview {border:1px dashed #999;padding:10px;min-height:80px;}
+</style>
+</head>
+<body data-salt="{{.SaltB64}}">
+<header>
+  <h1 id="welcome">Welcome, {{if .Username}}{{.Username}}{{else}}Guest{{end}}</h1>
+  <button id="openFormsModalBtn">🛠️ Open Dynamic Forms</button>
+  <button id="downloadJsonBtn">💾 Download JSON</button>
+  <input type="file" id="uploadJsonInput" accept=".json" class="hidden">
+  <button id="uploadJsonBtn">📂 Upload JSON</button>
+  <a href="/logout" style="color:#fff;">Logout</a>
+</header>
+
+<!-- ==================== MAIN INTERFACE (Dynamic UX) ==================== -->
+<main id="mainInterface">
+  <p class="empty-msg">There is no data in this context.</p>
+</main>
+
+<!-- ==================== IMPORT FORM TEMPLATE (HTML) ==================== -->
+<section style="padding:1rem;background:#f0f8ff;">
+  <h2>Import a form (HTML)</h2>
+  <input type="file" id="formFileInput" accept=".html,.htm">
+  <button id="resetImportBtn">Reset</button>
+  <button id="submitImportBtn">Submit</button>
+</section>
+
+<!-- ==================== TEMPLATE ADDER (reused everywhere) ==================== -->
+<template id="TemplateAdder">
+  <div class="template-adder"><strong>Add a component:</strong></div>
+</template>
+
+<!-- Hidden container that holds every stored <template> (including imported ones) -->
+<div id="templatesContainer" class="hidden"></div>
+
+<!-- ==================== MODAL THAT CONTAINS DYNAMIC FORMS ==================== -->
+<div class="modal-backdrop" id="formsModal">
+  <div class="modal">
+    <button class="close-modal" id="closeFormsModalBtn">&times;</button>
+    <h2>Dynamic Forms – Build a New Form</h2>
+
+    <!-- ==== Dynamic Forms UI ==== -->
+    <div class="df-builder">
+      <!-- 1. Type selector -->
+      <label for="df-type">Type</label>
+      <select id="df-type">
+        <option value="text">text</option>
+        <option value="password">password</option>
+        <option value="email">email</option>
+        <option value="number">number</option>
+        <option value="date">date</option>
+        <option value="checkbox">checkbox</option>
+        <option value="radio">radio</option>
+        <option value="file">file</option>
+        <option value="tel">tel</option>
+        <option value="url">url</option>
+        <option value="color">color</option>
+        <option value="range">range</option>
+        <option value="search">search</option>
+        <option value="hidden">hidden</option>
+      </select>
+
+      <!-- 2. Name field -->
+      <label for="df-name">Name</label>
+      <input type="text" id="df-name" placeholder="e.g. username">
+
+      <!-- 3. Attributes sub‑component -->
+      <fieldset style="margin-top:15px;">
+        <legend>Attributes</legend>
+        <label for="df-attr-select">Attribute</label>
+        <select id="df-attr-select">
+          <option value="">-- choose attribute --</option>
+          <option value="placeholder">placeholder</option>
+          <option value="maxlength">maxlength</option>
+          <option value="minlength">minlength</option>
+          <option value="required">required</option>
+          <option value="readonly">readonly</option>
+          <option value="disabled">disabled</option>
+          <option value="pattern">pattern</option>
+          <option value="size">size</option>
+          <option value="autocomplete">autocomplete</option>
+          <option value="autofocus">autofocus</option>
+          <option value="step">step</option>
+          <option value="min">min</option>
+          <option value="max">max</option>
+          <option value="multiple">multiple</option>
+          <option value="accept">accept</option>
+        </select>
+        <label for="df-attr-value">Value (blank for booleans)</label>
+        <input type="text" id="df-attr-value" placeholder="e.g. 10">
+      </fieldset>
+
+      <!-- 4. Reset / Add buttons -->
+      <button type="button" id="df-reset-btn">Reset Selections</button>
+      <button type="button" id="df-add-btn">Add to Form</button>
+
+      <!-- 5. Preview area -->
+      <h3>Preview</h3>
+      <button type="button" id="df-clear-preview-btn">Clear Preview</button>
+      <div id="df-preview"></div>
+
+      <!-- 6. Save button -->
+      <button type="button" id="df-save-btn">💾 Save Form as Template</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ------------------------------------------------------------------
+   CLIENT‑SIDE HELPERS (pure JS, uses Web Crypto API)
+   ------------------------------------------------------------------ */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+
+/* ---------- Decrypt stored context (if any) ---------- */
+(async () => {
+  const encB64 = "{{.EncCtxB64}}";
+  if (!encB64) return;
+  const pwd = prompt("Enter your password to unlock saved context:");
+  if (pwd === null) return;
+  try {
+    const ctx = await decryptContext(encB64, pwd);
+    restoreFromContext(ctx);
+  } catch (e) {
+    alert("Failed to decrypt saved context – wrong password?");
+  }
+})();
+
+/* ---------- Crypto helpers ---------- */
+async function sha256(buf) { return await crypto.subtle.digest('SHA-256', buf); }
+async function deriveKey(pwd, saltB64) {
+  const salt = Uint8Array.from(atob(saltB64), c=>c.charCodeAt(0));
+  const pwdBytes = new TextEncoder().encode(pwd);
+  const combined = new Uint8Array(salt.length+pwdBytes.length);
+  combined.set(salt);
+  combined.set(pwdBytes, salt.length);
+  const keyMaterial = await sha256(combined);
+  return await crypto.subtle.importKey('raw', keyMaterial, {name:'AES-GCM'}, false, ['encrypt','decrypt']);
+}
+async function encryptContext(obj, pwd) {
+  const saltB64 = document.body.dataset.salt;
+  const key = await deriveKey(pwd, saltB64);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const pt = new TextEncoder().encode(JSON.stringify(obj));
+  const ct = await crypto.subtle.encrypt({name:'AES-GCM', iv}, key, pt);
+  const combined = new Uint8Array(iv.length+ct.byteLength);
+  combined.set(iv);
+  combined.set(new Uint8Array(ct), iv.length);
+  return btoa(String.fromCharCode(...combined));
+}
+async function decryptContext(b64, pwd) {
+  const data = Uint8Array.from(atob(b64), c=>c.charCodeAt(0));
+  const iv = data.slice(0,12);
+  const ct = data.slice(12);
+  const saltB64 = document.body.dataset.salt;
+  const key = await deriveKey(pwd, saltB64);
+  const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv}, key, ct);
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+
+/* ---------- Context handling ----------
+   localContext.templates = [] where each entry is:
+   { name:string, inputs:[{type:string,name:string,attrs:object}] }
+------------------------------------------------------------------- */
+let localContext = {templates: []};
+
+function restoreFromContext(ctx) {
+  if (!ctx || !Array.isArray(ctx.templates)) return;
+  localContext = ctx;
+  ctx.templates.forEach(t => {
+    const tmpl = document.createElement('template');
+    tmpl.setAttribute('data-name', t.name||'Untitled');
+    let inner = '<form>';
+    t.inputs.forEach(i => {
+      inner += `<input type="${i.type}" name="${i.name}"`;
+      Object.entries(i.attrs||{}).forEach(([k,v])=>{
+        if (v===true) inner+=` ${k}`;
+        else inner+=` ${k}="${v}"`;
+      });
+      inner+='>';
+    });
+    inner += '</form>';
+    tmpl.innerHTML = inner;
+    $('#templatesContainer').appendChild(tmpl);
+  });
+  refreshAllAdders();
+}
+
+/* ---------- Push updated context to server ---------- */
+async function pushContextToServer(pwd) {
+  const enc = await encryptContext(localContext, pwd);
+  await fetch('/api/saveContext', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({enc})
+  });
+}
+
+/* ---------- UI helpers ---------- */
+function updateEmptyMessage(mainEl){
+  const hasReal = Array.from(mainEl.children).some(ch=>!ch.classList?.contains('empty-msg'));
+  const msg = mainEl.querySelector('.empty-msg');
+  if (hasReal){
+    if (msg) msg.remove();
+  }else{
+    if (!msg){
+      const p=document.createElement('p');
+      p.className='empty-msg';
+      p.textContent='There is no data in this context.';
+      mainEl.appendChild(p);
+    }
+  }
+}
+
+/* TemplateAdder creation – reused for every <main> */
+function createTemplateAdder(parentMain, tmplList){
+  const clone = $('#TemplateAdder').content.cloneNode(true);
+  const container = clone.querySelector('.template-adder');
+  tmplList.forEach(t => {
+    const btn=document.createElement('button');
+    btn.type='button';
+    btn.textContent = t.getAttribute('data-name') || 'Template';
+    btn.addEventListener('click',()=>addComponentFromTemplate(t,parentMain));
+    container.appendChild(btn);
+  });
+  return container;
+}
+
+/* Add component from a stored <template> */
+function addComponentFromTemplate(tmpl, targetMain){
+  const frag = tmpl.content.cloneNode(true);
+  const article = document.createElement('article');
+
+  const details = document.createElement('details');
+  const summary = document.createElement('summary');
+  summary.textContent = tmpl.getAttribute('data-name') || 'Component';
+  details.appendChild(summary);
+
+  const nestedMain = document.createElement('main');
+  nestedMain.appendChild(frag);
+  details.appendChild(nestedMain);
+  article.appendChild(details);
+
+  const innerAdder = createTemplateAdder(nestedMain, getAllTemplates());
+  nestedMain.after(innerAdder);
+  targetMain.appendChild(article);
+  updateEmptyMessage(targetMain);
+}
+
+/* Gather all stored templates (including those added at runtime) */
+function getAllTemplates(){
+  return $$('#templatesContainer template');
+}
+
+/* Refresh every TemplateAdder on the page (call after adding a new template) */
+function refreshAllAdders(){
+  $$('.template-adder').forEach(ad=> {
+    if (!ad.closest('.modal')) ad.remove();
+  });
+  $$('main').forEach(mainEl=>{
+    const adder = createTemplateAdder(mainEl, getAllTemplates());
+    mainEl.after(adder);
+  });
+}
+
+/* ---------- Import HTML form (file selector) ---------- */
+$('#resetImportBtn').addEventListener('click', () => {
+  $('#formFileInput').value = '';
+});
+$('#submitImportBtn').addEventListener('click', async () => {
+  const file = $('#formFileInput').files[0];
+  if (!file) { alert('Choose a file first.'); return; }
+
+  const fd = new FormData();
+  fd.append('formfile', file);
+  const resp = await fetch('/import', {method: 'POST', body: fd});
+  const data = await resp.json();
+  if (data.status === 'ok') {
+    await loadServerTemplates();
+    refreshAllAdders();
+    alert('Form imported.');
+  } else {
+    alert('Import failed.');
+  }
+});
+
+/* Load server‑side templates (manifest) */
+async function loadServerTemplates(){
+  try {
+    const resp = await fetch('/templates/manifest.json');
+    if (!resp.ok) return;
+    const list = await resp.json(); // array of filenames
+    for (const fn of list) {
+      const txt = await fetch('/templates/' + encodeURIComponent(fn)).then(r=>r.text());
+      $('#templatesContainer').insertAdjacentHTML('beforeend', txt);
+    }
+  } catch (e) {
+    console.error('Failed to load templates:', e);
+  }
+}
+
+/* ---------- Modal open / close handling ---------- */
+$('#openFormsModalBtn').addEventListener('click', () => {
+  $('#formsModal').style.display = 'flex';
+});
+$('#closeFormsModalBtn').addEventListener('click', () => {
+  $('#formsModal').style.display = 'none';
+});
+$('#formsModal').addEventListener('click', e => {
+  if (e.target === $('#formsModal')) $('#formsModal').style.display = 'none';
+});
+
+/* ---------- Dynamic Forms actions ---------- */
+$('#df-reset-btn').addEventListener('click', () => {
+  $('#df-type').selectedIndex = 0;
+  $('#df-name').value = '';
+  $('#df-attr-select').selectedIndex = 0;
+  $('#df-attr-value').value = '';
+});
+
+$('#df-add-btn').addEventListener('click', () => {
+  const type = $('#df-type').value.trim();
+  const name = $('#df-name').value.trim();
+  const attr = $('#df-attr-select').value;
+  const val  = $('#df-attr-value').value.trim();
+
+  if (!type) { alert('Pick a type.'); return; }
+  if (!name) { alert('Give the input a name.'); return; }
+
+  const inp = document.createElement('input');
+  inp.type = type;
+  inp.name = name;
+
+  const booleanAttrs = ['required','readonly','disabled','autofocus','multiple'];
+  if (attr) {
+    if (booleanAttrs.includes(attr)) {
+      inp.setAttribute(attr, '');
+    } else if (val) {
+      inp.setAttribute(attr, val);
+    } else {
+      console.warn(`Attribute "${attr}" ignored – no value supplied.`);
+    }
+  }
+
+  const preview = $('#df-preview');
+  preview.appendChild(inp);
+  preview.appendChild(document.createTextNode(' '));
+});
+
+$('#df-clear-preview-btn').addEventListener('click', () => {
+  $('#df-preview').innerHTML = '';
+});
+
+$('#df-save-btn').addEventListener('click', async () => {
+  const previewDiv = $('#df-preview');
+  if (!previewDiv.children.length) {
+    alert('Nothing to save – build the form first.');
+    return;
+  }
+
+  // Wrap preview in a <form> for semantics
+  const form = document.createElement('form');
+  form.appendChild(previewDiv.cloneNode(true));
+
+  // Serialize to HTML string
+  const serializer = new XMLSerializer();
+  const markup = serializer.serializeToString(form);
+
+  // Prompt for a friendly name (optional)
+  const name = prompt('Enter a name for this template (optional):', 'My Custom Form');
+
+  // Store the template on the server
+  const payload = new URLSearchParams();
+  payload.append('html', markup);
+  payload.append('name', name || '');
+
+  const resp = await fetch('/import', {
+    method: 'POST',
+    body: payload
+  });
+
+  const result = await resp.json();
+  if (result.status === 'ok') {
+    await loadServerTemplates();
+    refreshAllAdders();
+    alert('Template saved and added to the component library.');
+    $('#df-preview').innerHTML = '';
+  } else {
+    alert('Failed to save template.');
+  }
+});
+
+/* ---------- JSON Export / Import (client side) ---------- */
+$('#downloadJsonBtn').addEventListener('click', () => {
+  const data = serializeMain($('#mainInterface'));
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'combined-ux.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+$('#uploadJsonBtn').addEventListener('click', () => $('#uploadJsonInput').click());
+
+$('#uploadJsonInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (data && data.tag === 'main') {
+        rebuildFromData($('#mainInterface'), data);
+        alert('JSON imported successfully.');
+      } else {
+        alert('Invalid JSON structure.');
+      }
+    } catch (err) {
+      alert('Failed to parse JSON: ' + err);
+    }
+  };
+  reader.readAsText(file);
+});
+
+/* Serialize the current <main> hierarchy into a plain‑object */
+function serializeMain(mainEl) {
+  const obj = { tag: 'main', children: [] };
+  mainEl.childNodes.forEach(node => {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      if (node.matches('article')) {
+        const summary = node.querySelector('summary')?.textContent?.trim() || '';
+        const nested = node.querySelector('main');
+        obj.children.push({
+          tag: 'article',
+          title: summary,
+          content: serializeMain(nested)
+        });
+      } else if (node.matches('template')) {
+        // ignore hidden templates
+      } else {
+        obj.children.push({ tag: node.tagName.toLowerCase(), html: node.outerHTML });
+      }
+    }
+  });
+  return obj;
+}
+
+/* Rebuild the UI from the object produced by serializeMain */
+function rebuildFromData(container, obj) {
+  container.innerHTML = '';
+  obj.children.forEach(child => {
+    if (child.tag === 'article') {
+      const article = document.createElement('article');
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.textContent = child.title || 'Untitled';
+      details.appendChild(summary);
+
+      const nestedMain = document.createElement('main');
+      rebuildFromData(nestedMain, child.content);
+      details.appendChild(nestedMain);
+      article.appendChild(details);
+
+      // inner TemplateAdder for the nested main
+      const innerAdder = createTemplateAdder(nestedMain, getAllTemplates());
+      nestedMain.after(innerAdder);
+
+      container.appendChild(article);
+    } else {
+      const div = document.createElement('div');
+      div.innerHTML = child.html;
+      container.appendChild(div.firstElementChild);
+    }
+  });
+  updateEmptyMessage(container);
+}
+
+/* Store a user‑created template in the hidden container (client‑side) */
+function storeUserTemplate(htmlString, name) {
+  const tmpl = document.createElement('template');
+  tmpl.innerHTML = htmlString.trim();
+  if (name) tmpl.setAttribute('data-name', name);
+  $('#templatesContainer').appendChild(tmpl);
+}
+
+/* Optional: preload a very simple template so the UI isn’t empty */
+storeUserTemplate(`
+<form>
+  <label>Name: <input type="text" name="name"></label><br>
+  <label>Email: <input type="email" name="email"></label><br>
+  <button type="submit">Send</button>
+</form>
+`, 'Simple Contact Form');
+
+/* Add a top‑level TemplateAdder if any templates exist */
+function initTopLevelAdder() {
+  if (getAllTemplates().length) {
+    const adder = createTemplateAdder($('#mainInterface'), getAllTemplates());
+    $('#mainInterface').after(adder);
+  }
+}
+initTopLevelAdder();
+
+/* Ensure the empty‑message reflects the current state */
+updateEmptyMessage($('#mainInterface'));
+</script>
+</body>
+</html>

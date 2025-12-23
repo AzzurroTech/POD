@@ -1,0 +1,112 @@
+openapi: 3.0.0
+info:
+  title: Lumo Form Storage API
+  version: 1.0.0
+  description: |
+    API generated from the Go program that stores arbitrary HTML forms,
+    indexes them by key and value, and serves them back on demand.
+servers:
+  - url: http://localhost:8080
+    description: Local development server (the Go program listens on port 8080)
+
+paths:
+  /:
+    get:
+      summary: List stored forms that match query parameters
+      description: |
+        Returns an HTML page containing links to stored forms.  
+        If query parameters are supplied, only forms that contain **all** of the provided keys and at least one of the supplied values for each key are listed.  
+        When no query is supplied, every stored form is listed.
+      operationId: listForms
+      parameters:
+        - in: query
+          name: "*"
+          description: |
+            Arbitrary key/value pairs used as a filter.  
+            Example: `?email=user@example.com&country=DE`
+          style: form
+          explode: true
+          schema:
+            type: object
+            additionalProperties:
+              type: string
+      responses:
+        '200':
+          description: HTML page with the list of matching forms.
+          content:
+            text/html:
+              schema:
+                type: string
+        '404':
+          description: No matching forms found (still returns a 200 with an empty list in the HTML page).
+        '405':
+          description: Method not allowed (only GET is supported on this path).
+
+    post:
+      summary: Submit a new form to be stored
+      description: |
+        Accepts an `application/x-www-form-urlencoded` payload containing any number of fields.
+        The server writes a new HTML file that recreates the submitted form, updates the in‑memory
+        key/value indexes, and returns a short confirmation page with a link to the stored form.
+      operationId: submitForm
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              description: Arbitrary key/value pairs submitted by the user.
+              additionalProperties:
+                type: string
+      responses:
+        '200':
+          description: Confirmation page with a link to the newly saved form.
+          content:
+            text/html:
+              schema:
+                type: string
+        '400':
+          description: Bad request – e.g., malformed form data or empty payload.
+          content:
+            text/html:
+              schema:
+                type: string
+        '405':
+          description: Method not allowed (only POST is supported on this path).
+
+  /forms/{formId}:
+    get:
+      summary: Retrieve a stored form
+      description: |
+        Serves the HTML file that was created when the form was submitted.
+        The `{formId}` path parameter corresponds to the filename **without** the `.html` extension.
+        The server safely resolves the request, rejecting any attempts to traverse outside the
+        storage directory (e.g., `../` or `./` sequences).
+      operationId: getForm
+      parameters:
+        - in: path
+          name: formId
+          required: true
+          description: Identifier of the stored form (the filename without the `.html` suffix).
+          schema:
+            type: string
+            pattern: ^form_[0-9]+$
+      responses:
+        '200':
+          description: The stored HTML form.
+          content:
+            text/html:
+              schema:
+                type: string
+        '404':
+          description: Form not found or request attempted directory traversal.
+          content:
+            text/html:
+              schema:
+                type: string
+        '405':
+          description: Method not allowed (only GET is supported on this path).
+
+components:
+  securitySchemes: {}
+  schemas: {}

@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dynamic UX – Integrated with Dynamic Forms</title>
+<style>
+  /* -------------------- General layout -------------------- */
+  body {font-family:Arial,sans-serif;margin:0;padding:0;box-sizing:border-box;}
+  header {background:#004466;color:#fff;padding:1rem;display:flex;align-items:center;gap:1rem;}
+  header h1 {margin:0;font-size:1.2rem;flex-grow:1;}
+  header button {background:#fff;color:#004466;border:none;padding:.4rem .8rem;cursor:pointer;}
+  main {padding:1rem;min-height:60vh;}
+  .empty-msg {color:#777;font-style:italic;}
+  article {border:1px solid #ccc;margin:1rem 0;padding:.5rem;background:#fafafa;}
+  summary {font-weight:bold;cursor:pointer;}
+  .template-adder {margin:1rem 0;padding:.5rem;background:#eef;border:1px dashed #88a;}
+  .template-adder button {margin-right:.5rem;}
+  .hidden {display:none;}
+
+  /* -------------------- Modal (Dynamic Forms) -------------------- */
+  .modal-backdrop {
+    position:fixed;top:0;left:0;width:100vw;height:100vh;
+    background:rgba(0,0,0,0.5);display:none;justify-content:center;align-items:center;
+    z-index:1000;
+  }
+  .modal {
+    background:#fff;padding:1rem;max-width:600px;width:90%;border-radius:5px;position:relative;
+    box-shadow:0 4px 12px rgba(0,0,0,0.3);
+  }
+  .modal h2 {margin-top:0;}
+  .close-modal {
+    position:absolute;top:.5rem;right:.5rem;background:none;border:none;font-size:1.2rem;cursor:pointer;
+  }
+
+  /* -------------------- Dynamic Forms specific -------------------- */
+  .df-builder {border:1px solid #ccc;padding:1rem;margin-top:1rem;}
+  .df-builder h2 {margin-top:0;}
+  .df-builder label {display:block;margin-top:10px;}
+  .df-builder select, .df-builder input[type=text] {width:100%;max-width:300px;padding:5px;}
+  .df-builder button {margin-top:10px;margin-right:5px;}
+  #df-preview {border:1px dashed #999;padding:10px;min-height:80px;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="pathHeader">/</h1>
+  <button id="openFormsModalBtn">🛠️ Open Dynamic Forms</button>
+  <button id="downloadJsonBtn">💾 Download JSON</button>
+  <input type="file" id="uploadJsonInput" accept=".json" class="hidden">
+  <button id="uploadJsonBtn">📂 Upload JSON</button>
+</header>
+
+<!-- ==================== MAIN INTERFACE (Dynamic UX) ==================== -->
+<main id="mainInterface">
+  <p class="empty-msg">There is no data in this context.</p>
+</main>
+
+<!-- ==================== IMPORT FORM TEMPLATE (HTML) ==================== -->
+<section style="padding:1rem;background:#f0f8ff;">
+  <h2>Import a form (HTML)</h2>
+  <input type="file" id="formFileInput" accept=".html,.htm">
+  <button id="resetImportBtn">Reset</button>
+  <button id="submitImportBtn">Submit</button>
+</section>
+
+<!-- ==================== TEMPLATE ADDER (reused everywhere) ==================== -->
+<template id="TemplateAdder">
+  <div class="template-adder">
+    <strong>Add a component:</strong>
+    <!-- Buttons will be injected here by JS -->
+  </div>
+</template>
+
+<!-- Hidden container that holds every stored <template> (including imported ones) -->
+<div id="templatesContainer" class="hidden"></div>
+
+<!-- ==================== MODAL THAT CONTAINS DYNAMIC FORMS ==================== -->
+<div class="modal-backdrop" id="formsModal">
+  <div class="modal">
+    <button class="close-modal" id="closeFormsModalBtn">&times;</button>
+    <h2>Dynamic Forms – Build a New Form</h2>
+
+    <!-- ==== Dynamic Forms UI (same as the component you asked for) ==== -->
+    <div class="df-builder">
+      <!-- 1. Type selector -->
+      <label for="df-type">Type</label>
+      <select id="df-type">
+        <option value="text">text</option>
+        <option value="password">password</option>
+        <option value="email">email</option>
+        <option value="number">number</option>
+        <option value="date">date</option>
+        <option value="checkbox">checkbox</option>
+        <option value="radio">radio</option>
+        <option value="file">file</option>
+        <option value="tel">tel</option>
+        <option value="url">url</option>
+        <option value="color">color</option>
+        <option value="range">range</option>
+        <option value="search">search</option>
+        <option value="hidden">hidden</option>
+      </select>
+
+      <!-- 2. Name field -->
+      <label for="df-name">Name</label>
+      <input type="text" id="df-name" placeholder="e.g. username">
+
+      <!-- 3. Attributes sub‑component -->
+      <fieldset style="margin-top:15px;">
+        <legend>Attributes</legend>
+
+        <label for="df-attr-select">Attribute</label>
+        <select id="df-attr-select">
+          <option value="">-- choose attribute --</option>
+          <option value="placeholder">placeholder</option>
+          <option value="maxlength">maxlength</option>
+          <option value="minlength">minlength</option>
+          <option value="required">required</option>
+          <option value="readonly">readonly</option>
+          <option value="disabled">disabled</option>
+          <option value="pattern">pattern</option>
+          <option value="size">size</option>
+          <option value="autocomplete">autocomplete</option>
+          <option value="autofocus">autofocus</option>
+          <option value="step">step</option>
+          <option value="min">min</option>
+          <option value="max">max</option>
+          <option value="multiple">multiple</option>
+          <option value="accept">accept</option>
+        </select>
+
+        <label for="df-attr-value">Value (leave empty for boolean attributes)</label>
+        <input type="text" id="df-attr-value" placeholder="e.g. 10">
+      </fieldset>
+
+      <!-- 4. Reset / Add buttons -->
+      <button type="button" id="df-reset-btn">Reset Selections</button>
+      <button type="button" id="df-add-btn">Add to Form</button>
+
+      <!-- 5. Preview area -->
+      <h3>Preview</h3>
+      <button type="button" id="df-clear-preview-btn">Clear Preview</button>
+      <div id="df-preview"></div>
+
+      <!-- 6. Save button (adds the built form as a template to Dynamic UX) -->
+      <button type="button" id="df-save-btn">💾 Save Form as Template</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==============================================================
+   Utility shortcuts
+   ============================================================== */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+
+/* --------------------------------------------------------------
+   0. Header path & empty‑message handling (Dynamic UX)
+   -------------------------------------------------------------- */
+function refreshPath(){ $('#pathHeader').textContent = window.location.pathname || '/'; }
+refreshPath();
+
+function updateEmptyMessage(mainEl){
+  const hasRealChildren = Array.from(mainEl.children)
+                               .some(ch=>!ch.classList?.contains('empty-msg'));
+  const msg = mainEl.querySelector('.empty-msg');
+  if (hasRealChildren){
+    if (msg) msg.remove();
+  }else{
+    if (!msg){
+      const p=document.createElement('p');
+      p.className='empty-msg';
+      p.textContent='There is no data in this context.';
+      mainEl.appendChild(p);
+    }
+  }
+}
+
+/* --------------------------------------------------------------
+   1. Import external HTML form as a template (Dynamic UX)
+   -------------------------------------------------------------- */
+let importedTemplate = null;   // holds a <template> created from the uploaded file
+
+$('#resetImportBtn').addEventListener('click',()=>{ $('#formFileInput').value=''; importedTemplate=null; });
+
+$('#submitImportBtn').addEventListener('click',()=>{
+  const file = $('#formFileInput').files[0];
+  if(!file){ alert('Choose a file first.'); return; }
+  const reader = new FileReader();
+  reader.onload = e=>{
+    const tmpl = document.createElement('template');
+    tmpl.innerHTML = e.target.result.trim();
+    importedTemplate = tmpl;
+    alert('Form imported – you can now add it via the “Add a component” area.');
+    // Ensure a TemplateAdder exists for the top‑level main
+    if(!$('#mainInterface').nextElementSibling?.classList?.contains('template-adder')){
+      const adder = createTemplateAdder($('#mainInterface'),[tmpl]);
+      $('#mainInterface').after(adder);
+    }
+  };
+  reader.readAsText(file);
+});
+
+/* --------------------------------------------------------------
+   2. TemplateAdder creation (reusable for any <main>)
+   -------------------------------------------------------------- */
+function createTemplateAdder(parentMain, templateList){
+  const adderClone = $('#TemplateAdder').content.cloneNode(true);
+  const container = adderClone.querySelector('.template-adder');
+
+  templateList.forEach((tmpl,idx)=>{
+    const btn=document.createElement('button');
+    btn.type='button';
+    btn.textContent = tmpl.getAttribute('data-name')||`Template ${idx+1}`;
+    btn.addEventListener('click',()=>addComponentFromTemplate(tmpl,parentMain));
+    container.appendChild(btn);
+  });
+  return container;
+}
+
+/* --------------------------------------------------------------
+   3. Adding a component based on a template (Dynamic UX)
+   -------------------------------------------------------------- */
+function addComponentFromTemplate(tmpl, targetMain){
+  const fragment = tmpl.content.cloneNode(true);
+  const article = document.createElement('article');
+
+  const details = document.createElement('details');
+  const summary = document.createElement('summary');
+  summary.textContent = tmpl.getAttribute('data-name')||'Component';
+  details.appendChild(summary);
+
+  const nestedMain = document.createElement('main');
+  nestedMain.appendChild(fragment);
+  details.appendChild(nestedMain);
+  article.appendChild(details);
+
+  // Inner TemplateAdder for the nested main
+  const innerAdder = createTemplateAdder(nestedMain, getAllTemplates());
+  nestedMain.after(innerAdder);
+
+  targetMain.appendChild(article);
+  updateEmptyMessage(targetMain);
+}
+
+/* --------------------------------------------------------------
+   Helper: gather every stored template (including imported)
+   -------------------------------------------------------------- */
+function getAllTemplates(){
+  const list=[];
+  $$('#templatesContainer template').forEach(t=>list.push(t));
+  if(importedTemplate) list.push(importedTemplate);
+  return list;
+}
+
+/* --------------------------------------------------------------
+   4. JSON export (Dynamic UX)
+   -------------------------------------------------------------- */
+$('#downloadJsonBtn').addEventListener('click',()=>{
+  const data = serializeMain($('#mainInterface'));
+  const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download='dynamic-ux.json'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+function serializeMain(mainEl){
+  const obj={tag:'main',children:[]};
+  mainEl.childNodes.forEach(node=>{
+    if(node.nodeType===Node.ELEMENT_NODE){
+      if(node.matches('article')){
+        const summary = node.querySelector('summary')?.textContent?.trim()||'';
+        const nested = node.querySelector('main');
+        obj.children.push({
+          tag:'article',
+          title:summary,
+          content:serializeMain(nested)
+        });
+      }else if(node.matches('template')){
+        // ignore hidden templates
+      }else{
+        obj.children.push({tag:node.tagName.toLowerCase(),html:node.outerHTML});
+      }
+    }
+  });
+  return obj;
+}
+
+/* --------------------------------------------------------------
+   5. JSON import (Dynamic UX)
+   -------------------------------------------------------------- */
+$('#uploadJsonBtn').addEventListener('click',()=>$('#uploadJsonInput').click());
+
+$('#uploadJsonInput').addEventListener('change',e=>{
+  const file=e.target.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const data=JSON.parse(ev.target.result);
+      if(data && data.tag==='main'){
+        rebuildFromData($('#mainInterface'),data);
+        alert('JSON imported successfully.');
+      }else{
+        alert('Invalid JSON structure.');
+      }
+    }catch(err){
+      alert('Failed to parse JSON: '+err);
+    }
+  };
+  reader.readAsText(file);
+});
+
+function rebuildFromData(container,obj){
+  container.innerHTML='';
+  obj.children.forEach(child=>{
+    if(child.tag==='article'){
+      const article=document.createElement('article');
+      const details=document.createElement('details');
+      const summary=document.createElement('summary');
+      summary.textContent=child.title||'Untitled';
+      details.appendChild(summary);
+
+      const nestedMain=document.createElement('main');
+      rebuildFromData(nestedMain,child.content);
+      details.appendChild(nestedMain);
+      article.appendChild(details);
+
+      // inner TemplateAdder for the nested main
+      const innerAdder=createTemplateAdder(nestedMain,getAllTemplates());
+      nestedMain.after(innerAdder);
+
+      container.appendChild(article);
+    }else{
+      const div=document.createElement('div');
+      div.innerHTML=child.html;
+      container.appendChild(div.firstElementChild);
+    }
+  });
+  updateEmptyMessage(container);
+}
+
+/* --------------------------------------------------------------
+   6. Store a user‑defined template (used by Dynamic Forms)
+   -------------------------------------------------------------- */
+function storeUserTemplate(htmlString, name){
+  const tmpl=document.createElement('template');
+  tmpl.innerHTML=htmlString.trim();
+  if(name) tmpl.setAttribute('data-name',name);
+  $('#templatesContainer').appendChild(tmpl);
+}
+
+/* Optional: preload a very simple template so the UI isn’t empty */
+storeUserTemplate(`
+<form>
+  <label>Name: <input type="text" name="name"></label><br>
+  <label>Email: <input type="email" name="email"></label><br>
+  <button type="submit">Send</button>
+</form>
+`,'Simple Contact Form');
+
+/* Add a top‑level TemplateAdder if any templates exist */
+function refreshAllAdders(){
+  // Remove existing adders (except the one inside a modal – we don’t touch that)
+  $$('.template-adder').forEach(ad => {
+    if (!ad.closest('.modal')) ad.remove();
+  });
+  // Re‑create adders for every <main> on the page
+  $$('main').forEach(mainEl => {
+    const adder = createTemplateAdder(mainEl, getAllTemplates());
+    mainEl.after(adder);
+  });
+}
+if(getAllTemplates().length){
+  refreshAllAdders();
+}
+updateEmptyMessage($('#mainInterface'));
+
+/* ==============================================================
+   DYNAMIC FORMS LOGIC (inside the modal)
+   ============================================================== */
+
+/* 1️⃣ Reset selections */
+$('#df-reset-btn').addEventListener('click',()=>{
+  $('#df-type').selectedIndex=0;
+  $('#df-name').value='';
+  $('#df-attr-select').selectedIndex=0;
+  $('#df-attr-value').value='';
+});
+
+/* 2️⃣ Add to preview */
+$('#df-add-btn').addEventListener('click',()=>{
+  const type=$('#df-type').value.trim();
+  const name=$('#df-name').value.trim();
+  const attr=$('#df-attr-select').value;
+  const val=$('#df-attr-value').value.trim();
+
+  if(!type){ alert('Pick a type.'); return; }
+  if(!name){ alert('Give the input a name.'); return; }
+
+  const inp=document.createElement('input');
+  inp.type=type; inp.name=name;
+
+  const booleanAttrs=['required','readonly','disabled','autofocus','multiple'];
+  if(attr){
+    if(booleanAttrs.includes(attr)){
+      inp.setAttribute(attr,'');
+    }else if(val){
+      inp.setAttribute(attr,val);
+    }else{
+      console.warn(`Attribute "${attr}" ignored – no value supplied.`);
+    }
+  }
+
+  const preview=$('#df-preview');
+  preview.appendChild(inp);
+  preview.appendChild(document.createTextNode(' '));
+});
+
+/* 3️⃣ Clear preview */
+$('#df-clear-preview-btn').addEventListener('click',()=>{$('#df-preview').innerHTML='';});
+
+/* 4️⃣ Save – turn the preview into a template and register it with Dynamic UX */
+$('#df-save-btn').addEventListener('click',()=>{
+  const previewDiv=$('#df-preview');
+  if(!previewDiv.children.length){
+    alert('Nothing to save – build the form first.');
+    return;
+  }
+
+  // Wrap the preview in a <form> (keeps semantics)
+  const form=document.createElement('form');
+  form.appendChild(previewDiv.cloneNode(true));
+
+  // Serialize to string
+  const serializer=new XMLSerializer();
+  const markup=serializer.serializeToString(form);
+
+  // Optional friendly name
+  const name=prompt('Enter a name for this template (optional):','My Custom Form');
+
+  // Store the template in the Dynamic UX system
+  storeUserTemplate(markup, name||'Unnamed Template');
+
+  // Refresh all TemplateAdders so the new template becomes selectable
+  refreshAllAdders();
+
+  alert('Template saved and added to the component library.');
+});
+
+/* --------------------------------------------------------------
+   Modal open / close handling
+   -------------------------------------------------------------- *//* --------------------------------------------------------------
+   Modal open / close handling
+   -------------------------------------------------------------- */
+$('#openFormsModalBtn').addEventListener('click', () => {
+  $('#formsModal').style.display = 'flex';
+});
+
+$('#closeFormsModalBtn').addEventListener('click', () => {
+  $('#formsModal').style.display = 'none';
+});
+
+// Optional: clicking on the backdrop (outside the modal) also closes it
+$('#formsModal').addEventListener('click', e => {
+  if (e.target === $('#formsModal')) {
+    $('#formsModal').style.display = 'none';
+  }
+});
+</script>
+
+</body>
+</html>

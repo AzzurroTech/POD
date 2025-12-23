@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dynamic Input Builder</title>
+<style>
+  body {font-family: Arial, sans-serif; margin: 20px;}
+  .builder, .preview {border: 1px solid #ccc; padding: 15px; margin-bottom: 20px;}
+  .builder h2, .preview h2 {margin-top: 0;}
+  label {display: block; margin-top: 10px;}
+  select, input[type=text] {width: 100%; max-width: 300px; padding:5px;}
+  button {margin-top: 10px; margin-right: 5px;}
+  #previewArea {border: 1px dashed #999; padding: 10px; min-height: 80px;}
+</style>
+</head>
+<body>
+
+<div class="builder">
+  <h2>🛠️ Input Builder</h2>
+
+  <!-- 1. Type selector -->
+  <label for="inpType">Type</label>
+  <select id="inpType">
+    <option value="text">text</option>
+    <option value="password">password</option>
+    <option value="email">email</option>
+    <option value="number">number</option>
+    <option value="date">date</option>
+    <option value="checkbox">checkbox</option>
+    <option value="radio">radio</option>
+    <option value="file">file</option>
+    <option value="tel">tel</option>
+    <option value="url">url</option>
+    <option value="color">color</option>
+    <option value="range">range</option>
+    <option value="search">search</option>
+    <option value="hidden">hidden</option>
+  </select>
+
+  <!-- 2. Name element -->
+  <label for="inpName">Name</label>
+  <input type="text" id="inpName" placeholder="e.g. username">
+
+  <!-- 3. Attributes sub‑component -->
+  <fieldset style="margin-top:15px;">
+    <legend>Attributes</legend>
+
+    <!-- 3.1 Attribute selector -->
+    <label for="attrSelect">Attribute</label>
+    <select id="attrSelect">
+      <option value="">-- choose attribute --</option>
+      <option value="placeholder">placeholder</option>
+      <option value="maxlength">maxlength</option>
+      <option value="minlength">minlength</option>
+      <option value="required">required</option>
+      <option value="readonly">readonly</option>
+      <option value="disabled">disabled</option>
+      <option value="pattern">pattern</option>
+      <option value="size">size</option>
+      <option value="autocomplete">autocomplete</option>
+      <option value="autofocus">autofocus</option>
+      <option value="step">step</option>
+      <option value="min">min</option>
+      <option value="max">max</option>
+      <option value="multiple">multiple</option>
+      <option value="accept">accept</option>
+    </select>
+
+    <!-- 3.2 Value input (blank for boolean attributes) -->
+    <label for="attrValue">Value (leave empty for boolean attributes)</label>
+    <input type="text" id="attrValue" placeholder="e.g. 10">
+  </fieldset>
+
+  <!-- 4. Reset button -->
+  <button type="button" id="resetBtn">Reset Selections</button>
+
+  <!-- 5. Add button -->
+  <button type="button" id="addBtn">Add to Form</button>
+</div>
+
+<!-- 7. Preview section -->
+<div class="preview">
+  <h2>🔍 Preview</h2>
+  <button type="button" id="clearPreviewBtn">Clear Preview</button>
+  <div id="previewArea"></div>
+</div>
+
+<!-- 9. Save button -->
+<div style="text-align:center;">
+  <button type="button" id="saveBtn">💾 Save Form as Component</button>
+</div>
+
+<script>
+/* ---------- Utility helpers ---------- */
+function $(id) { return document.getElementById(id); }
+
+/* ---------- 4. Reset selections ---------- */
+$('resetBtn').addEventListener('click', function () {
+  $('inpType').selectedIndex = 0;
+  $('inpName').value = '';
+  $('attrSelect').selectedIndex = 0;
+  $('attrValue').value = '';
+});
+
+/* ---------- 5. Add to Form (build an <input>) ---------- */
+$('addBtn').addEventListener('click', function () {
+  const type   = $('inpType').value.trim();
+  const name   = $('inpName').value.trim();
+  const attr   = $('attrSelect').value;
+  const val    = $('attrValue').value.trim();
+
+  if (!type) { alert('Please select an input type.'); return; }
+  if (!name) { alert('Please give the input a name.'); return; }
+
+  // Create the input element
+  const inp = document.createElement('input');
+  inp.type = type;
+  inp.name = name;
+
+  // Apply the chosen attribute (if any)
+  if (attr) {
+    // Boolean attributes (required, readonly, disabled, autofocus, multiple, etc.)
+    const booleanAttrs = ['required','readonly','disabled','autofocus','multiple'];
+    if (booleanAttrs.includes(attr)) {
+      inp.setAttribute(attr, '');
+    } else if (val) {
+      inp.setAttribute(attr, val);
+    } else {
+      // If the attribute expects a value but none was given, ignore it.
+      console.warn(`Attribute "${attr}" ignored – no value supplied.`);
+    }
+  }
+
+  // Append to preview area
+  const preview = $('previewArea');
+  preview.appendChild(inp);
+  preview.appendChild(document.createTextNode(' ')); // spacing
+});
+
+/* ---------- 8. Clear preview ---------- */
+$('clearPreviewBtn').addEventListener('click', function () {
+  $('previewArea').innerHTML = '';
+});
+
+/* ---------- 9. Save form as a reusable component ---------- */
+$('saveBtn').addEventListener('click', function () {
+  const preview = $('previewArea');
+  if (!preview.children.length) {
+    alert('Nothing to save – build the form first.');
+    return;
+  }
+
+  // Wrap the generated inputs in a <form> element
+  const form = document.createElement('form');
+  form.appendChild(preview.cloneNode(true));
+
+  // Serialize the form markup
+  const serializer = new XMLSerializer();
+  const markup = serializer.serializeToString(form);
+
+  // Create a downloadable file (named dynamic-form.html)
+  const blob = new Blob([markup], {type: 'text/html'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = 'dynamic-form.html';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+</script>
+
+</body>
+</html>

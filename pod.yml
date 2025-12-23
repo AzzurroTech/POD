@@ -1,0 +1,340 @@
+openapi: 3.0.3
+info:
+  title: POD – Personal Online Dashboard
+  description: |
+    POD (Personal Online Dashboard) is a lightweight, self‑contained web
+    application that lets users log in (or use a guest bypass), build and
+    store custom HTML forms, import external forms as reusable templates,
+    and persist the UI state securely (client‑side encryption). All
+    endpoints are served by a single Go binary and use only the Go
+    standard library.
+  version: "1.0.0"
+  contact:
+    name: Azzurro Technology Inc.
+    url: https://azzurro.tech
+    email: info@azzurro.tech
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+servers:
+  - url: http://localhost:{port}
+    description: Development server
+    variables:
+      port:
+        enum:
+          - "8080"
+          - "80"
+        default: "8080"
+tags:
+  - name: Authentication
+    description: Login, registration and logout
+  - name: Dashboard
+    description: Main UI and auxiliary actions
+  - name: API
+    description: JSON‑based programmatic endpoints
+  - name: Templates
+    description: Importing and serving HTML templates
+
+paths:
+  /login:
+    get:
+      tags:
+        - Authentication
+      summary: Render the login page
+      operationId: getLoginPage
+      parameters:
+        - name: redirect
+          in: query
+          description: Original query string to forward after successful login
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: HTML login page
+          content:
+            text/html:
+              schema:
+                type: string
+    post:
+      tags:
+        - Authentication
+      summary: Authenticate a user
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                redirect:
+                  type: string
+      responses:
+        '302':
+          description: Redirect to the dashboard (or original query)
+        '200':
+          description: Login page with error message
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /register:
+    get:
+      tags:
+        - Authentication
+      summary: Render the registration page
+      operationId: getRegisterPage
+      responses:
+        '200':
+          description: HTML registration page
+          content:
+            text/html:
+              schema:
+                type: string
+    post:
+      tags:
+        - Authentication
+      summary: Create a new user account
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '302':
+          description: Redirect to the dashboard after successful registration
+        '200':
+          description: Registration page with error message
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /logout:
+    get:
+      tags:
+        - Authentication
+      summary: End the current session
+      operationId: logoutUser
+      responses:
+        '302':
+          description: Redirect to the login page
+
+  /app:
+    get:
+      tags:
+        - Dashboard
+      summary: Render the main dashboard UI
+      operationId: getDashboard
+      parameters:
+        - name: bypass
+          in: query
+          description: Set to `1` to start a guest session without login
+          required: false
+          schema:
+            type: string
+            enum: [ "1" ]
+      responses:
+        '200':
+          description: HTML dashboard page
+          content:
+            text/html:
+              schema:
+                type: string
+        '302':
+          description: Redirect to login when authentication is required
+
+  /api/saveContext:
+    post:
+      tags:
+        - API
+      summary: Persist the encrypted UI context for the logged‑in user
+      operationId: saveContext
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncryptedContext'
+      responses:
+        '200':
+          description: Context saved successfully
+        '401':
+          description: Unauthorized (no logged‑in user)
+
+  /api/query:
+    get:
+      tags:
+        - API
+      summary: Store query parameters as a hidden‑input form file
+      operationId: storeQuery
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: any
+          in: query
+          description: Arbitrary key/value pairs (must be at least one)
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Query stored successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryResponse'
+        '400':
+          description: No query parameters supplied
+        '401':
+          description: Unauthorized (user not logged in)
+
+  /import:
+    post:
+      tags:
+        - Templates
+      summary: Upload an HTML file and store it as a reusable <template>
+      operationId: importTemplate
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                formfile:
+                  type: string
+                  format: binary
+                  description: HTML file to import
+      responses:
+        '200':
+          description: Template imported successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportResponse'
+        '400':
+          description: Invalid request / missing file
+        '401':
+          description: Unauthorized
+
+  /templates/manifest.json:
+    get:
+      tags:
+        - Templates
+      summary: List all stored template filenames
+      operationId: listTemplates
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: JSON array of template filenames
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        '401':
+          description: Unauthorized
+
+  /templates/{filename}:
+    get:
+      tags:
+        - Templates
+      summary: Retrieve a stored template (raw <template> markup)
+      operationId: getTemplate
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          description: Name of the stored template file (including extension)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Raw HTML containing a <template> element
+          content:
+            text/html:
+              schema:
+                type: string
+        '404':
+          description: Template not found
+        '401':
+          description: Unauthorized
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sid
+      description: Session identifier cookie set by the server
+
+  schemas:
+    EncryptedContext:
+      type: object
+      required:
+        - enc
+      properties:
+        enc:
+          type: string
+          description: Base64‑encoded AES‑GCM ciphertext of the UI context
+          example: "U2FsdGVkX1+Z0K..."
+
+    QueryResponse:
+      type: object
+      required:
+        - status
+        - file
+      properties:
+        status:
+          type: string
+          enum: [ stored ]
+          description: Operation status
+        file:
+          type: string
+          description: Base name of the generated HTML file (without .html)
+          example: "form_1701234567890123456"
+
+    ImportResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [ ok ]
+          description: Indicates successful import
+
+security:
+  - cookieAuth: []
+
+externalDocs:
+  description: Project repository
+  url: https://github.com/azzurrotech/pod
