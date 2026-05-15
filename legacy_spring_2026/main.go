@@ -190,8 +190,8 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 	results := []Record{}
 
-	mu.RLock()
-	defer mu.RUnlock()
+	//mu.RLock()
+	//defer mu.RUnlock()
 
 	for _, meta := range indexStore.Records {
 		rec := meta.ToRecord()
